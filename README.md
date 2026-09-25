@@ -12,7 +12,7 @@ compare, with working code, what each paradigm gives you and what it costs.
 * **01–16** implement the paradigms in the slides: message passing, client/server, P2P, message
   systems, RPC, RMI/ORB, object spaces, mobile agents, groupware, REST, GraphQL, gRPC, real-time web,
   AMQP, microservices + API gateway, serverless.
-* **17–23**. They cover current approaches the slides don't: event streaming (Kafka),
+* **17–23**. They cover current: event streaming (Kafka),
   consensus (Raft), CRDTs / local-first, actors & distributed futures (Ray), durable workflows & Sagas
   (Temporal), orchestration via reconciliation loops (Kubernetes), and AI-agent protocols (MCP).
 * **24** is the **capstone**: an event-driven *Smart Weather Alert Platform*. It runs as about ten cooperating processes
