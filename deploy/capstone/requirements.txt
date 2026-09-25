@@ -1,0 +1,7 @@
+# Runtime dependencies of the capstone platform image (see Dockerfile).
+grpcio>=1.62
+grpcio-tools>=1.62
+fastapi>=0.110
+uvicorn>=0.29
+strawberry-graphql>=0.230
+httpx>=0.27

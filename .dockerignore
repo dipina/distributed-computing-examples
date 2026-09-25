@@ -1,0 +1,10 @@
+# Build context = repository root. Keep the image small: only what the capstone needs is COPY'd,
+# but we also exclude bulky/irrelevant files from the context sent to the Docker daemon.
+.git
+.venv
+**/__pycache__
+**/*.pyc
+**/generated
+examples/10_rest_api/openapi.json
+*.zip
+*.patch

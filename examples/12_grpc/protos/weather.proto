@@ -1,0 +1,22 @@
+// Contract-first API definition (IDL) for the weather service.
+// Compiled to Python stubs with grpc_tools.protoc (done automatically by demo.py).
+syntax = "proto3";
+
+package weather;
+
+service Weather {
+  // 1) Unary: one request -> one response (classic RPC)
+  rpc GetTemperature (CityRequest) returns (Temperature);
+  // 2) Server streaming: one request -> stream of responses
+  rpc WatchCity (WatchRequest) returns (stream Temperature);
+  // 3) Client streaming: stream of requests -> one response
+  rpc UploadReadings (stream Temperature) returns (UploadSummary);
+  // 4) Bidirectional streaming: both sides stream independently
+  rpc LiveAlerts (stream Temperature) returns (stream Alert);
+}
+
+message CityRequest  { string city = 1; }
+message WatchRequest { string city = 1; int32 samples = 2; }
+message Temperature  { string city = 1; double celsius = 2; int64 timestamp_ms = 3; }
+message UploadSummary { int32 received = 1; double mean = 2; }
+message Alert { string city = 1; string level = 2; string message = 3; }

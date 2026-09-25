@@ -1,0 +1,194 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Smart Weather Alert Platform (Unit 0, example 24) on Amazon ECS Fargate. One task runs the
+  ingest (gRPC :50051), the public API (GraphQL + SSE :8080) and two analytics workers; the
+  containers share a task volume holding the commit log and the SQLite read model.
+  Deploy it with deploy/capstone/aws/deploy.py (builds + pushes the image to ECR first).
+
+# References:
+#   ECS task definitions ....... https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definitions.html
+#   Fargate task storage ....... https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-storage.html
+#   Bind mounts (shared volume)  https://docs.aws.amazon.com/AmazonECS/latest/developerguide/bind-mounts.html
+#   Container dependencies ..... https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html#container_definition_dependson
+#   CloudFormation ECS resources https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/AWS_ECS.html
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: ECR image URI (for example 123456789012.dkr.ecr.us-east-1.amazonaws.com/weather-platform:20260925)
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for the task (the default VPC works)
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: PUBLIC subnets (the task gets a public IP to be reachable and to pull from ECR without a NAT gateway)
+  AllowedCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    Description: Who may reach ports 8080 and 50051 (deploy.py uses YOUR public IP /32). No auth, no TLS - teaching demo!
+  ExecutionRoleArn:
+    Type: String
+    Default: ""
+    Description: Existing task execution role (e.g. LabRole in AWS Academy Learner Lab). Empty = create one.
+  CpuArchitecture:
+    Type: String
+    Default: X86_64
+    AllowedValues: [X86_64, ARM64]
+    Description: Must match the image platform (linux/amd64 -> X86_64, linux/arm64 -> ARM64)
+  TaskCpu:
+    Type: String
+    Default: "1024"
+    AllowedValues: ["512", "1024", "2048"]
+  TaskMemory:
+    Type: String
+    Default: "2048"
+    AllowedValues: ["1024", "2048", "4096"]
+
+Conditions:
+  CreateExecutionRole: !Equals [!Ref ExecutionRoleArn, ""]
+
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AWS::StackName}-cluster"
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}"
+      RetentionInDays: 7
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Weather platform - GraphQL/SSE API and gRPC ingest
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - {IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: !Ref AllowedCidr, Description: GraphQL + SSE API}
+        - {IpProtocol: tcp, FromPort: 50051, ToPort: 50051, CidrIp: !Ref AllowedCidr, Description: gRPC ingest}
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Condition: CreateExecutionRole
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ecs-tasks.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}"
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: !Ref CpuArchitecture
+      ExecutionRoleArn: !If [CreateExecutionRole, !GetAtt ExecutionRole.Arn, !Ref ExecutionRoleArn]
+      Volumes:
+        - Name: data                      # task-scoped (ephemeral) volume shared by all containers
+      ContainerDefinitions:
+        # 1) one-shot init container: Fargate bind mounts are root-owned; hand /data to the app user
+        - Name: init-data
+          Image: !Ref ImageUri
+          Essential: false
+          User: "0"
+          Command: ["chown", "-R", "10001:10001", "/data"]
+          MountPoints: [{SourceVolume: data, ContainerPath: /data}]
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: {awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: init}
+
+        # 2) gRPC ingest service: the only writer of the commit log
+        - Name: ingest
+          Image: !Ref ImageUri
+          Essential: true
+          Command: ["python", "ingest_service.py", "--data", "/data", "--host", "0.0.0.0", "--port", "50051"]
+          PortMappings: [{ContainerPort: 50051, Protocol: tcp}]
+          MountPoints: [{SourceVolume: data, ContainerPath: /data}]
+          LinuxParameters: {InitProcessEnabled: true}
+          DependsOn: [{ContainerName: init-data, Condition: SUCCESS}]
+          HealthCheck:
+            Command: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 50051), 2)"]
+            Interval: 10
+            Retries: 3
+            StartPeriod: 10
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: {awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: ingest}
+
+        # 3) public API: GraphQL queries + SSE alert stream + /health
+        - Name: api
+          Image: !Ref ImageUri
+          Essential: true
+          Command: ["python", "api_service.py", "--data", "/data", "--host", "0.0.0.0", "--port", "8080"]
+          PortMappings: [{ContainerPort: 8080, Protocol: tcp}]
+          MountPoints: [{SourceVolume: data, ContainerPath: /data}]
+          LinuxParameters: {InitProcessEnabled: true}
+          DependsOn: [{ContainerName: init-data, Condition: SUCCESS}]
+          HealthCheck:
+            Command: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+            Interval: 10
+            Retries: 3
+            StartPeriod: 10
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: {awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: api}
+
+        # 4) consumer group "analytics": two members splitting the 3 partitions
+        - Name: analytics-0
+          Image: !Ref ImageUri
+          Essential: true
+          Command: ["python", "analytics_worker.py", "--data", "/data", "--worker", "0", "--workers", "2"]
+          MountPoints: [{SourceVolume: data, ContainerPath: /data}]
+          LinuxParameters: {InitProcessEnabled: true}
+          DependsOn: [{ContainerName: ingest, Condition: HEALTHY}]
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: {awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: analytics}
+        - Name: analytics-1
+          Image: !Ref ImageUri
+          Essential: true
+          Command: ["python", "analytics_worker.py", "--data", "/data", "--worker", "1", "--workers", "2"]
+          MountPoints: [{SourceVolume: data, ContainerPath: /data}]
+          LinuxParameters: {InitProcessEnabled: true}
+          DependsOn: [{ContainerName: ingest, Condition: HEALTHY}]
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: {awslogs-group: !Ref LogGroup, awslogs-region: !Ref "AWS::Region", awslogs-stream-prefix: analytics}
+
+  # The ECS service is the cloud "supervisor": it keeps DesiredCount tasks running (reconciliation loop,
+  # example 22). If an essential container dies, ECS replaces the whole task.
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${AWS::StackName}-svc"
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref TaskDefinition
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0          # single task with local state: stop old before starting new
+        MaximumPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups: [!Ref SecurityGroup]
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+  ServiceName:
+    Value: !GetAtt Service.Name
+  LogGroupName:
+    Value: !Ref LogGroup

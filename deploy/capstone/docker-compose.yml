@@ -1,0 +1,77 @@
+# Smart Weather Alert Platform (example 24) with Docker Compose.
+#
+#   docker compose -f deploy/capstone/docker-compose.yml up -d --build        # ingest, api, 2 workers
+#   docker compose -f deploy/capstone/docker-compose.yml --profile sensors up  # stream readings
+#   python deploy/capstone/smoke_test.py --host 127.0.0.1                     # end-to-end check from the host
+#   docker compose -f deploy/capstone/docker-compose.yml exec analytics-0 python /app/chaos.py
+#   docker compose -f deploy/capstone/docker-compose.yml down -v
+#
+# Mapping to the paradigms: every service is a separate process/container (15); `restart: unless-stopped`
+# + healthchecks replace the Python supervisor (22); the shared `data` volume holds the commit log (17)
+# and the SQLite read model, so all components must run on the SAME host (see README for the cloud).
+# Compose file reference: https://docs.docker.com/reference/compose-file/
+
+name: weather-platform
+
+x-component: &component
+  build:
+    context: ../..
+    dockerfile: deploy/capstone/Dockerfile
+    args:
+      BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim}
+  image: weather-platform:latest
+  init: true                      # tini as PID 1: forwards signals, reaps children
+  restart: unless-stopped         # the container runtime is now the supervisor
+  volumes:
+    - data:/data
+
+services:
+  ingest:
+    <<: *component
+    command: ["python", "ingest_service.py", "--data", "/data", "--host", "0.0.0.0", "--port", "50051"]
+    ports: ["50051:50051"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 50051), 2)"]
+      interval: 5s
+      retries: 5
+
+  api:
+    <<: *component
+    command: ["python", "api_service.py", "--data", "/data", "--host", "0.0.0.0", "--port", "8080"]
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 5s
+      retries: 5
+
+  analytics-0:
+    <<: *component
+    command: ["python", "analytics_worker.py", "--data", "/data", "--worker", "0", "--workers", "2"]
+    depends_on:
+      ingest: {condition: service_healthy}
+
+  analytics-1:
+    <<: *component
+    command: ["python", "analytics_worker.py", "--data", "/data", "--worker", "1", "--workers", "2"]
+    depends_on:
+      ingest: {condition: service_healthy}
+
+  # Traffic generator (edge devices). Only with:  --profile sensors
+  sensors:
+    <<: *component
+    profiles: ["sensors"]
+    restart: "no"
+    volumes: []
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        python sensor.py --host ingest --port 50051 --city bilbao  --profile mild     &
+        python sensor.py --host ingest --port 50051 --city oslo    --profile cold     &
+        python sensor.py --host ingest --port 50051 --city madrid  --profile warm     &
+        python sensor.py --host ingest --port 50051 --city sevilla --profile heatwave &
+        wait
+    depends_on:
+      ingest: {condition: service_healthy}
+
+volumes:
+  data:
