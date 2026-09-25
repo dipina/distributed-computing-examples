@@ -12,7 +12,11 @@ compare, with working code, what each paradigm gives you and what it costs.
 * **01–16** cover: message passing, client/server, P2P, message
   systems, RPC, RMI/ORB, object spaces, mobile agents, groupware, REST, GraphQL, gRPC, real-time web,
   AMQP, microservices + API gateway, serverless.
+<<<<<<< HEAD
 * **17–23** cover: event streaming (Kafka),
+=======
+* **17–23**. They cover current: event streaming (Kafka),
+>>>>>>> 50cd32d7c6f87e4fbed4cdf9699d444d3563132d
   consensus (Raft), CRDTs / local-first, actors & distributed futures (Ray), durable workflows & Sagas
   (Temporal), orchestration via reconciliation loops (Kubernetes), and AI-agent protocols (MCP).
 * **24** is the **capstone**: an event-driven *Smart Weather Alert Platform*. It runs as about ten cooperating processes
