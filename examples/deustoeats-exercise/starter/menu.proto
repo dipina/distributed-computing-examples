@@ -1,0 +1,20 @@
+// DeustoEats - contract of the internal menu service (DO NOT CHANGE: check.py relies on it).
+syntax = "proto3";
+
+package deustoeats;
+
+service Menu {
+  // Validate and price an order. Errors (gRPC status codes):
+  //   INVALID_ARGUMENT     empty order or qty <= 0
+  //   NOT_FOUND            unknown sku
+  //   FAILED_PRECONDITION  qty > stock
+  rpc Quote (QuoteRequest) returns (QuoteReply);
+  // Stream the whole menu, one item at a time (server streaming).
+  rpc ListItems (Empty) returns (stream Item);
+}
+
+message Empty {}
+message Item { string sku = 1; string name = 2; int32 price_cents = 3; int32 stock = 4; int32 prep_ms = 5; }
+message OrderLine { string sku = 1; int32 qty = 2; }
+message QuoteRequest { repeated OrderLine lines = 1; }
+message QuoteReply { int32 total_cents = 1; int32 prep_ms = 2; }

@@ -9,17 +9,15 @@ They build on each other and all use the same simple domain, a network of **weat
 The business logic stays the same throughout; what changes is how it is distributed. By the end you can
 compare, with working code, what each paradigm gives you and what it costs.
 
-* **01–16** implement the paradigms in the slides: message passing, client/server, P2P, message
+* **01–16** cover: message passing, client/server, P2P, message
   systems, RPC, RMI/ORB, object spaces, mobile agents, groupware, REST, GraphQL, gRPC, real-time web,
   AMQP, microservices + API gateway, serverless.
-* **17–23** are **new**. They cover current approaches the slides don't: event streaming (Kafka),
+* **17–23** cover: event streaming (Kafka),
   consensus (Raft), CRDTs / local-first, actors & distributed futures (Ray), durable workflows & Sagas
   (Temporal), orchestration via reconciliation loops (Kubernetes), and AI-agent protocols (MCP).
 * **24** is the **capstone**: an event-driven *Smart Weather Alert Platform*. It runs as about ten cooperating processes
   and combines gRPC ingestion, a partitioned commit log, a consumer group with CQRS projections, **GraphQL** and SSE APIs,
   a self-healing supervisor, and an AI agent that works through MCP (see §6, example 24).
-  The folder **`deploy/capstone/`** packages it with **Docker** (Compose) and deploys it to **AWS ECS Fargate**
-  with CloudFormation (see §6, *Deploying the capstone*).
 
 Every demo is **self-contained**: it starts its own servers, processes or brokers on `localhost`, runs a scripted story,
 prints a colour-coded, time-stamped log of who does what, and ends with **key takeaways**.
@@ -72,7 +70,7 @@ distributed-computing-examples/
 ├── common/
 │   ├── domain.py              ← the shared business logic: WeatherService / Station
 │   └── utils.py               ← logging, free ports, optional imports, uvicorn-in-a-thread
-├── examples/                  ← every folder: demo.py + README.md (teaching guide)
+├── examples/
 │   ├── 01_message_passing/demo.py
 │   ├── 02_client_server_sockets/demo.py
 │   ├── 03_peer_to_peer/demo.py
@@ -105,14 +103,6 @@ distributed-computing-examples/
 │       ├── analytics_worker.py    ← consumer-group member, transactional projector
 │       ├── api_service.py         ← GraphQL + SSE + /health (FastAPI + Strawberry)
 │       └── mcp_weather_server.py  ← MCP tools that call the GraphQL API
-├── deploy/capstone/           ← the capstone in containers and on AWS
-│   ├── Dockerfile             one image, the command selects the component
-│   ├── docker-compose.yml     ingest + api + 2 workers + shared volume (+ "sensors" profile)
-│   ├── smoke_test.py          end-to-end test against any host (localhost or AWS)
-│   ├── chaos.py               kill a component inside its container
-│   ├── aws/ecs-fargate.yaml   CloudFormation: ECS cluster, task definition, service, SG, logs
-│   ├── aws/deploy.py          up | status | chaos | down  (AWS CLI + Docker, any OS)
-│   └── README.md              step-by-step guide (own account and AWS Academy Learner Lab)
 └── tests/test_examples.py     ← pytest smoke test: every demo must pass or skip
 ```
 
@@ -257,13 +247,8 @@ microservices (15), FaaS functions (16) and MCP tools (23).
 ## 6. The examples one by one
 
 Each subsection covers **the idea**, **what the demo shows**, and **what to look for** in the output.
-For teaching, every example folder also has its own **`README.md` teaching guide**. It contains a diagram (Mermaid), a step-by-step
-walkthrough matched to the real console output, a code map with line links, points to stress in class, discussion questions,
-exercises and further reading.
 
 ### 01 · Message passing (slide 4) — stdlib
-
-**Teaching guide:** [`examples/01_message_passing/README.md`](examples/01_message_passing/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Processes share no memory and cooperate only through `send` and `receive`. Every other paradigm is built on this.
 **Demo.** (1) Request/reply over a duplex `multiprocessing.Pipe` to a child process that owns the
@@ -272,16 +257,12 @@ exercises and further reading.
 
 ### 02 · Client/server with sockets (slide 5) — stdlib · `--role`
 
-**Teaching guide:** [`examples/02_client_server_sockets/README.md`](examples/02_client_server_sockets/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** A passive server (`listen`/`accept`) and active clients (`connect`, request, wait for the response).
 **Demo.** A threaded TCP server that speaks a **home-made JSON-lines protocol**: several requests on one connection,
 three concurrent clients, a protocol-level error, and a UDP variant for contrast.
 **Look for.** How much we had to design ourselves: framing, encoding, error format. Every later paradigm takes some of that work off our hands.
 
 ### 03 · Peer-to-peer: a mini-IPFS (slide 6) — stdlib
-
-**Teaching guide:** [`examples/03_peer_to_peer/README.md`](examples/03_peer_to_peer/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** There is no server. Every node is client and server at once.
 **Demo.** Six peers. Files are split into blocks addressed by their **SHA-256 (CID)**. "Who has block X?"
@@ -291,8 +272,6 @@ downloads it and starts seeding. Alice then leaves, and Carol still gets the fil
 
 ### 04 · Message system / MOM (slides 7–9) — stdlib
 
-**Teaching guide:** [`examples/04_message_system/README.md`](examples/04_message_system/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** A broker decouples producers and consumers in space and time.
 **Demo.** *Point-to-point*: eight jobs are sent before any consumer exists. Three competing workers
 load-balance them, and one crashes before sending its **ACK**, so its job is **redelivered**. *Pub/sub*: each subscriber gets a copy, and a late subscriber misses
@@ -301,8 +280,6 @@ earlier messages.
 
 ### 05 · RPC: XML-RPC & JSON-RPC 2.0 (slides 10, 20) — stdlib · `--role`
 
-**Teaching guide:** [`examples/05_rpc/README.md`](examples/05_rpc/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** Remote calls that look like local ones, through a client *stub* that marshals the call.
 **Demo.** An XML-RPC server with introspection (it prints the actual XML on the wire), and a hand-written JSON-RPC 2.0 server/stub
 with **notifications** and **batches**. Then the fallacies: a remote exception becomes a `Fault`, and a **timeout** leaves the
@@ -310,8 +287,6 @@ client unsure whether the call ran.
 **Look for.** RPC is action-oriented (verbs). Transparency is leaky, so design operations to be idempotent.
 
 ### 06 · Distributed objects: RMI / ORB + naming service (slides 11–13) — stdlib
-
-**Teaching guide:** [`examples/06_distributed_objects_rmi/README.md`](examples/06_distributed_objects_rmi/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** RPC plus object identity: you call methods on *specific* remote objects that keep state.
 **Demo.** A **registry/naming service** (like rmiregistry or CORBA Naming) with **Jini-style leases**; an **object server** that acts as the
@@ -322,16 +297,12 @@ Real library: `Pyro5`.
 
 ### 07 · Object space / tuple space (slide 12) — stdlib
 
-**Teaching guide:** [`examples/07_object_space/README.md`](examples/07_object_space/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** Processes coordinate through a shared associative memory: `write`, `read`, and atomic `take` with templates (Linda/JavaSpaces).
 **Demo.** A master/worker **bag of tasks** (automatic load balancing); `read` versus `take`; a **distributed mutex** built from a single token tuple;
 a timeout on a tuple that never appears.
 **Look for.** No process knows any other. Because `take` is atomic, each task runs exactly once.
 
 ### 08 · Mobile agents (slide 13) — stdlib
-
-**Teaching guide:** [`examples/08_mobile_agents/README.md`](examples/08_mobile_agents/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Move the code to the data. An agent (code plus state) travels host to host and returns home.
 **Demo.** Four host **processes**, each holding one city's private readings. The agent's source code and state travel as JSON,
@@ -341,16 +312,12 @@ run locally at each hop through `exec` in a restricted namespace, and come back 
 
 ### 09 · Collaborative groupware (slide 14) — stdlib
 
-**Teaching guide:** [`examples/09_collaborative_groupware/README.md`](examples/09_collaborative_groupware/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** A group session in which everyone produces and consumes.
 **Demo.** *Message-based*: a **sequencer** server gives a **total order** to concurrent multicasts (plus a private
 sub-group message). *Whiteboard-based*: a shared board with **snapshots for late joiners**.
 **Look for.** Every member sees the same order. The sequencer is a single point of failure; example 19 removes it.
 
 ### 10 · REST with FastAPI + Pydantic + OpenAPI (slides 15–25, 41–58) — `fastapi uvicorn httpx` · `--role server`
-
-**Teaching guide:** [`examples/10_rest_api/README.md`](examples/10_rest_api/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Resources, the uniform interface (GET/POST/PUT/DELETE), representations, statelessness, caching, hypermedia.
 **Demo.** A real uvicorn server with `/stations`, `/stations/{city}` and `/stations/{city}/readings`. It shows query-param filtering,
@@ -360,16 +327,12 @@ sub-group message). *Whiteboard-based*: a shared board with **snapshots for late
 
 ### 11 · GraphQL (slide 26) — `strawberry-graphql fastapi uvicorn httpx` · `--role server`
 
-**Teaching guide:** [`examples/11_graphql/README.md`](examples/11_graphql/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** One endpoint and a typed schema; the **client decides the shape** of the response.
 **Demo.** Field selection (no over-fetching); nested station → country → stations in **one round trip**;
 mutations with variables; errors in the `errors` array; **introspection**; printing the SDL generated from Python types.
 **Look for.** How the response size and shape follow the query. Trade-off: HTTP caching becomes harder.
 
 ### 12 · gRPC (slide 20) — `grpcio grpcio-tools`
-
-**Teaching guide:** [`examples/12_grpc/README.md`](examples/12_grpc/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Contract-first RPC. The `.proto` IDL is compiled into stubs, sent as Protocol Buffers over HTTP/2.
 **Demo.** It compiles `protos/weather.proto` at start-up, then runs all **four RPC kinds**: unary, server streaming, client streaming,
@@ -378,8 +341,6 @@ mutations with variables; errors in the `errors` array; **introspection**; print
 
 ### 13 · Real-time web: polling vs long polling vs SSE vs WebSocket (slides 59–63) — `fastapi uvicorn httpx websockets`
 
-**Teaching guide:** [`examples/13_realtime_web/README.md`](examples/13_realtime_web/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** HTTP can't push, so there are four workarounds.
 **Demo.** A sensor produces an event every 250 ms. Four clients each listen for 2 s. The output is a **comparison table**
 of HTTP requests, events received and average latency. The WebSocket client also **sends a command** on the same socket.
@@ -387,8 +348,6 @@ of HTTP requests, events received and average latency. The WebSocket client also
 (SSE is also how LLM APIs stream tokens.)
 
 ### 14 · AMQP: exchanges, bindings, queues (slides 64–71) — stdlib (+ optional `pika` + RabbitMQ)
-
-**Teaching guide:** [`examples/14_amqp/README.md`](examples/14_amqp/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Producers publish to **exchanges**; **bindings** route copies to **queues**.
 **Demo.** Part 1 is an in-process **mini-broker** that implements the routing rules of the **default, direct, fanout, topic
@@ -405,8 +364,6 @@ python examples/14_amqp/demo.py           # part 2 now runs too
 
 ### 15 · Microservices + API Gateway (slides 27–39) — `fastapi uvicorn httpx`
 
-**Teaching guide:** [`examples/15_microservices_gateway/README.md`](examples/15_microservices_gateway/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** Split the monolith into independently deployed services behind a single entry point.
 **Demo.** Three microservices run as **separate OS processes**. A FastAPI gateway adds **API-key auth**, **routing**,
 **parallel composition** (`/api/dashboard/{city}` fans out to three services), a **TTL cache**, a **token-bucket rate
@@ -417,8 +374,6 @@ the service is redeployed, and the breaker goes **half-open → closed**.
 
 ### 16 · Serverless / FaaS (slide 72) — stdlib
 
-**Teaching guide:** [`examples/16_serverless_faas/README.md`](examples/16_serverless_faas/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** Deploy functions, not servers. The platform provisions execution environments per event.
 **Demo.** A toy platform (environments are OS processes) with **HTTP, queue and cron triggers**, **cold versus warm starts**,
 **autoscaling** under a burst of 5 concurrent events, **timeouts** that kill a runaway function, **scale-to-zero** after idling,
@@ -426,8 +381,6 @@ the service is redeployed, and the breaker goes **half-open → closed**.
 **Look for.** The cold start adds about 400 ms. Idle time costs nothing. Don't keep state in globals.
 
 ### 17 · Event streaming: a Kafka-style log (NEW) — stdlib
-
-**Teaching guide:** [`examples/17_event_streaming/README.md`](examples/17_event_streaming/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** The broker is a **persistent, partitioned, append-only log**. Consuming does not delete anything.
 **Demo.** A 3-partition topic stored in real files with key-based partitioning (per-city ordering); a **consumer group** of two
@@ -437,8 +390,6 @@ members sharing partitions; an **independent group that replays** from offset 0;
 
 ### 18 · Consensus with Raft (NEW) — stdlib
 
-**Teaching guide:** [`examples/18_consensus_raft/README.md`](examples/18_consensus_raft/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** Get several machines to agree on one ordered log despite crashes and partitions, using majorities (quorums).
 **Demo.** Five Raft nodes (threads) on a simulated network. It shows **leader election**, **log replication and commit**, a **leader crash**
 followed by re-election, a restarted node **catching up**, and a **network partition**: the old leader in the minority *cannot commit*, the
@@ -446,8 +397,6 @@ majority elects a new leader, and on healing the stale entries are **discarded**
 **Look for.** Terms, votes and the moment commits happen. This is the core of etcd (and therefore Kubernetes), Consul and CockroachDB.
 
 ### 19 · CRDTs & local-first sync (NEW) — stdlib
-
-**Teaching guide:** [`examples/19_crdt_local_first/README.md`](examples/19_crdt_local_first/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Replicas accept writes **offline**, without a leader, and always **converge**, because merge is commutative, associative
 and idempotent.
@@ -457,8 +406,6 @@ conflicting edits offline, then gossip in arbitrary, duplicated order. The demo 
 
 ### 20 · Actor model & distributed futures, Ray-style (NEW) — stdlib (+ optional `ray`)
 
-**Teaching guide:** [`examples/20_actor_model/README.md`](examples/20_actor_model/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** Two primitives. **Remote tasks** return **futures**, and futures can be chained into a dataflow. **Actors** are stateful processes with a
 mailbox, so there are no locks. Supervisors **restart crashed actors**.
 **Demo.** A mini runtime with Ray's API (`f.remote()`, `get()`, `Actor.remote()`, `actor.method.remote()`): a measured
@@ -466,8 +413,6 @@ mailbox, so there are no locks. Supervisors **restart crashed actors**.
 (`os._exit`) followed by a **supervisor restart** (state lost). If `ray` is installed, the same code then runs on the **real Ray**.
 
 ### 21 · Durable workflows + Saga pattern (NEW) — stdlib
-
-**Teaching guide:** [`examples/21_durable_workflows_saga/README.md`](examples/21_durable_workflows_saga/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Multi-service business processes can't use ACID transactions. **Sagas** undo completed steps with **compensations**. **Durable
 execution** (Temporal, Step Functions, Durable Functions, Restate) persists every step so the workflow **survives crashes**.
@@ -477,16 +422,12 @@ proves the drone was reserved **once**. (4) A flaky payment gateway, handled by 
 
 ### 22 · Orchestration: desired state + reconciliation (NEW) — stdlib
 
-**Teaching guide:** [`examples/22_orchestration_reconciliation/README.md`](examples/22_orchestration_reconciliation/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
-
 **Idea.** Declare *what* you want ("3 replicas of v1") and let controllers loop **observe → diff → act** forever (Kubernetes).
 **Demo.** Pods are real processes running an HTTP server. A controller handles **create**, **self-heals** after a pod is killed, **scales**
 3 → 5 → 2, and does a **rolling update v1 → v2** while a round-robin **Service** keeps sending traffic, with **zero failed requests**.
 The output shows which version served each request during the rollout.
 
 ### 23 · AI-agent protocols: MCP (NEW) — stdlib (+ optional `mcp`)
-
-**Teaching guide:** [`examples/23_ai_agent_protocols_mcp/README.md`](examples/23_ai_agent_protocols_mcp/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** The Model Context Protocol links LLM apps to tools and data: **JSON-RPC 2.0** (as in 05) over **stdio** or **Streamable
 HTTP/SSE** (as in 13), with a capability handshake and **runtime discovery** of tools described by JSON Schema.
@@ -497,8 +438,6 @@ written with the **official SDK** (`fastmcp_server.py`), proving the two interop
 **Look for.** How old ideas come back: RPC stubs, directory services and mobile agents.
 
 ### 24 · CAPSTONE: Smart Weather Alert Platform — `grpcio grpcio-tools fastapi uvicorn strawberry-graphql httpx`
-
-**Teaching guide:** [`examples/24_capstone_smart_weather_platform/README.md`](examples/24_capstone_smart_weather_platform/README.md) — diagram, step-by-step walkthrough with real output, code map, discussion questions and exercises.
 
 **Idea.** Real systems combine paradigms, each used where it fits best. This is a small but complete **event-driven
 IoT platform** that follows the **CQRS** pattern: commands and events come in through gRPC and a log, and queries go out through GraphQL. Every box
@@ -539,36 +478,6 @@ consumer groups for scale; GraphQL for flexible reads; SSE for push; MCP for AI 
 Each component can also be started by hand. Every file has a usage line in its docstring, for example
 `python examples/24_capstone_smart_weather_platform/api_service.py --data /tmp/x --port 8080`, after which you can open
 <http://127.0.0.1:8080/graphql>.
-
-### Deploying the capstone: Docker and AWS (`deploy/capstone/`)
-
-The same platform goes through three stages without code changes. The components only gained a `--host` option so they can listen on
-`0.0.0.0` inside a container and so sensors can target a remote host:
-
-| Stage | Run it | Supervisor (22) | Reach it |
-|---|---|---|---|
-| Processes | `python examples/24_capstone_smart_weather_platform/demo.py` | Python `Supervisor` | localhost |
-| Docker Compose | `docker compose -f deploy/capstone/docker-compose.yml up -d --build` | `restart: unless-stopped` + healthchecks | `127.0.0.1:8080` / `:50051` |
-| AWS ECS Fargate | `python deploy/capstone/aws/deploy.py up` | ECS service (desired count 1) | the task's public IP |
-
-```bash
-# containers on your machine
-docker compose -f deploy/capstone/docker-compose.yml up -d --build
-python deploy/capstone/smoke_test.py --host 127.0.0.1            # sensors + SSE + GraphQL + MCP agent, from outside
-docker compose -f deploy/capstone/docker-compose.yml exec analytics-0 python /app/chaos.py   # watch it restart
-docker compose -f deploy/capstone/docker-compose.yml down -v
-
-# AWS (own account or AWS Academy Learner Lab; needs the AWS CLI and Docker)
-python deploy/capstone/aws/deploy.py up          # ECR push + CloudFormation + wait; prints the public endpoints
-python deploy/capstone/smoke_test.py --host <public-ip>
-python deploy/capstone/aws/deploy.py down --purge-images
-```
-
-`deploy.py up` builds the image for Fargate's CPU (`linux/amd64`, or `--arch arm64`) and pushes it to **Amazon ECR**.
-It deploys `aws/ecs-fargate.yaml`, which creates an ECS cluster, one Fargate task with the 4 components sharing a task volume,
-an ECS service, a security group open **only to your IP**, and CloudWatch logs. It uses **`LabRole`** automatically in Learner Lab.
-The costs, security caveats, the path to a truly cloud-native version (Amazon MSK, DynamoDB/RDS, ALB/NLB, EFS)
-and exercises are in [`deploy/capstone/README.md`](deploy/capstone/README.md).
 
 ---
 
@@ -654,8 +563,6 @@ in 06; **edge computing / WebAssembly sandboxes** in the discussion in 08.
 |---|---|
 | `SKIPPED: optional dependency ... not installed` | `pip install -r requirements.txt` (or the package shown). |
 | Example 14 part 2 says "no broker" | Start RabbitMQ with the `docker run` command above, and `pip install pika`. |
-| 23 part B fails / `mcp.server.fastmcp` not found | The `mcp` SDK 2.x renamed `FastMCP` to `MCPServer`. `fastmcp_server.py` supports both 1.x and 2.x; if the server still dies, the demo prints its error instead of a JSON traceback. |
-| `deploy.py up` fails on AWS | See the troubleshooting table in `deploy/capstone/README.md` (CPU architecture, Docker Hub rate limit, IP changes, Learner Lab role). |
 | Example 20 bonus says "Ray not installed" | `pip install ray` (large download). The main part does not need it. |
 | Firewall pop-ups (macOS/Windows) | All servers bind to `127.0.0.1` only, so it is safe to allow or deny. |
 | Windows / macOS behave differently with processes | The code is written for the `spawn` start method (the default on both) and is tested with `spawn` and `fork`. |
@@ -688,8 +595,7 @@ Every `demo.py` starts with an **Install / tools** block and a **Tutorials & ref
 
 | Tool | Used by | Install | Try |
 |---|---|---|---|
-| Docker (+ Compose v2) | 14, 17, 24 (deploy) | <https://docs.docker.com/get-started/get-docker/> | `docker compose version` |
-| AWS CLI v2 | 24 (deploy to AWS) | <https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html> | `aws sts get-caller-identity` |
+| Docker | 14, 17 | <https://docs.docker.com/get-started/get-docker/> | `docker run hello-world` |
 | RabbitMQ | 14 | `docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4-management` · <https://www.rabbitmq.com/docs/download> | UI at <http://localhost:15672> (guest/guest) |
 | Apache Kafka | 17 | `docker run -d --name kafka -p 9092:9092 apache/kafka:latest` · <https://kafka.apache.org/quickstart/> | `pip install confluent-kafka` |
 | IPFS Kubo | 03 | <https://docs.ipfs.tech/install/command-line/> | `ipfs init && ipfs add README.md` |
